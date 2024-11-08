@@ -2,8 +2,8 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -std=c23 -Wall -Wextra -pedantic -O2 -g -Wpedantic
-LDFLAGS = -L/usr/lib64/libncursesw.so -lm -lncursesw
+CFLAGS = -std=c11 -Wall -Wextra -pedantic -O2 -g -Wpedantic
+LDFLAGS = -lm -lncurses
 
 # Directories
 INCDIR = include
@@ -13,14 +13,14 @@ BINDIR = bin
 # Files
 SRC = $(SRCDIR)/main.c
 OBJ = $(SRC:.c=.o)
-TARGET = $(BINDIR)/my_project
+TARGET = $(SRCDIR)/my_project
 
 # Rules
-all: $(TARGET)
+all: $(TARGET) $(SRCDIR)
 
 $(TARGET): $(OBJ)
 	mkdir -p $(BINDIR)
-	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+	$(CC) $(OBJ) -o $(BINDIR)/main $(LDFLAGS)
 
 $(SRCDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CFLAGS) -I$(INCDIR) -c $< -o $@

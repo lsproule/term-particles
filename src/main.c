@@ -1,17 +1,18 @@
 #define _POSIX_C_SOURCE 199309L
-#include <string.h>
 #include <errno.h>
 #include <math.h>
 #include <ncurses.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
-const double FRICTION = 0.92;
-const int BASE_PARTICLE_COUNT = 1000;
+const float FRICTION = 0.92;
+const int BASE_PARTICLE_COUNT = 1000000;
+
 int msleep(long msec) {
   struct timespec ts;
   int res;
@@ -33,13 +34,13 @@ int msleep(long msec) {
 
 typedef struct particle particle;
 struct particle {
-  double x;
-  double y;
-  double vel_x;
-  double vel_y;
-  double acc_x;
-  double acc_y;
-  double lifespan;
+  float x;
+  float y;
+  float vel_x;
+  float vel_y;
+  float acc_x;
+  float acc_y;
+  float lifespan;
 };
 typedef struct worldCtx worldCtx;
 struct worldCtx {
@@ -55,7 +56,7 @@ void draw_pixel(int x, int y, const char pixel) {
   addch(pixel);
 }
 
-void particle_update(particle *this, double delta) {
+inline void particle_update(particle *this, float delta) {
   this->vel_x += this->acc_x;
   this->vel_y += this->acc_y;
 
@@ -70,7 +71,6 @@ void particle_update(particle *this, double delta) {
 }
 
 void particle_draw(particle *this) {
-  double total_vel = fabsf(this->vel_x) + fabsf(this->vel_y);
   if (this->lifespan > 300) {
     attron(COLOR_PAIR(1));
     draw_pixel(roundf(this->x), roundf(this->y), '#');
@@ -86,7 +86,7 @@ void particle_draw(particle *this) {
   }
 }
 
-void particle_apply_force(particle *this, double x, double y) {
+inline void particle_apply_force(particle *this, float x, double y) {
   this->acc_x += x;
   this->acc_y += y;
 }
@@ -104,17 +104,16 @@ void init_particles(particle *particles, worldCtx *world_ctx) {
   }
 }
 
-void update(double delta, particle *particles, worldCtx *world_ctx) {
-  double target_x = (double)world_ctx->mouse_x;
-  double target_y = (double)world_ctx->mouse_y;
+void update(float delta, particle *particles, worldCtx *world_ctx) {
+  float target_x = (double)world_ctx->mouse_x;
+  float target_y = (double)world_ctx->mouse_y;
   for (int i = 0; i < world_ctx->particle_count; i++) {
-    double dist_x = target_x - particles[i].x;
-    double dist_y = target_y - particles[i].y;
+    float dist_x = target_x - particles[i].x;
+    float dist_y = target_y - particles[i].y;
 
-    particle_apply_force(
-        &particles[i],
-        dist_x * 0.001 * (particles[i].lifespan / 100),
-        dist_y * 0.001 * (particles[i].lifespan / 100));
+    particle_apply_force(&particles[i],
+                         dist_x * 0.001 * (particles[i].lifespan / 100),
+                         dist_y * 0.001 * (particles[i].lifespan / 100));
     // Gravity
     // particle_apply_force(&particles[i], 0, 0.02);
 
@@ -139,11 +138,12 @@ void draw(particle *particles, worldCtx *world_ctx) {
   }
   draw_pixel(world_ctx->mouse_x, world_ctx->mouse_y, '+');
 }
-typedef struct argsForKeyListener argsForKeyListener;
-struct argsForKeyListener {
+
+
+ typedef struct argsForKeyListener {
   worldCtx *world_ctx;
   WINDOW *window;
-};
+} argsForKeyListener;
 
 void *listen_for_keys(void *args) {
 
@@ -162,8 +162,8 @@ void *listen_for_keys(void *args) {
   }
 }
 typedef struct statusWindowEntry {
-  const char* name;
-  double value;
+  const char *name;
+  float value;
 } statusWindowEntry;
 
 void draw_status_window(statusWindowEntry *statuses, int count) {
@@ -171,22 +171,22 @@ void draw_status_window(statusWindowEntry *statuses, int count) {
     int status_name_len = strlen(statuses[i].name);
     char status_entry_buffer[status_name_len + 50];
 
-    sprintf(status_entry_buffer,"%s: %lf\n",statuses[i].name,statuses[i].value);
-    move(1 + i,1);
+    sprintf(status_entry_buffer, "%s: %lf\n", statuses[i].name,
+            statuses[i].value);
+    move(1 + i, 1);
     printw("%s", status_entry_buffer);
   }
 }
 
 int main(int argc, char *argv[]) {
+  (void)argc, (void)argv;
   srand(time(NULL));
-  particle particles[BASE_PARTICLE_COUNT];
+  particle* particles = (particle*)malloc(BASE_PARTICLE_COUNT * sizeof(particle));
   WINDOW *window = initscr();
-
   start_color();
-  init_color(COLOR_RED,800,400,0);
-  init_color(COLOR_YELLOW,800,400,0);
-  init_color(COLOR_BLUE,1000,600,0);
-
+  init_color(COLOR_RED, 800, 400, 0);
+  init_color(COLOR_YELLOW, 800, 400, 0);
+  init_color(COLOR_BLUE, 1000, 600, 0);
 
   init_pair(1, COLOR_RED, COLOR_BLACK);
   init_pair(2, COLOR_YELLOW, COLOR_BLACK);
@@ -201,7 +201,6 @@ int main(int argc, char *argv[]) {
   world_ctx.screen_height = getmaxy(window);
 
   init_particles(particles, &world_ctx);
-  int frame_count = 0;
 
   char status_window[500];
 
@@ -213,14 +212,13 @@ int main(int argc, char *argv[]) {
                  (void *)&args_for_key_listener); // kms
 
   struct timeval pre_frame_time, post_frame_time;
-  const double SIXTY_FPS_US = (1.0 / 60.0) * 1000.0 * 1000.0;
+  const float SIXTY_FPS_US = (1.0 / 60.0) * 1000.0 * 1000.0;
   while (1) {
 
     gettimeofday(&pre_frame_time, NULL);
     world_ctx.screen_width = getmaxx(window);
     world_ctx.screen_height = getmaxy(window);
 
-    frame_count++;
     clear();
     move(1, 1);
     printw(status_window);
@@ -228,24 +226,29 @@ int main(int argc, char *argv[]) {
     draw(particles, &world_ctx);
 
     gettimeofday(&post_frame_time, NULL);
-    double frame_time =
-        (double)((pre_frame_time.tv_sec - post_frame_time.tv_sec) * 1000000 +
-                 post_frame_time.tv_usec - pre_frame_time.tv_usec);
+    float frame_time =
+        (float)((pre_frame_time.tv_sec - post_frame_time.tv_sec) * 1000000 +
+                post_frame_time.tv_usec - pre_frame_time.tv_usec);
     msleep((SIXTY_FPS_US - frame_time) / 1000);
     statusWindowEntry status_window_entries[] = {
-      (statusWindowEntry){.name = "frame time", .value = frame_time},
-      (statusWindowEntry){.name = "mouse x", .value = world_ctx.mouse_x },
-      (statusWindowEntry){.name = "mouse y", .value = world_ctx.mouse_y },
-      (statusWindowEntry){.name = "screen width", .value = world_ctx.screen_width },
-      (statusWindowEntry){.name = "screen height", .value = world_ctx.screen_height },
-      (statusWindowEntry){.name = "target frame time", .value = SIXTY_FPS_US},
-      (statusWindowEntry){.name = "frame diff(us)", .value = (SIXTY_FPS_US - frame_time)},
-      (statusWindowEntry){.name = "particle count", .value = world_ctx.particle_count},
+        (statusWindowEntry){.name = "frame time", .value = frame_time},
+        (statusWindowEntry){.name = "mouse x", .value = world_ctx.mouse_x},
+        (statusWindowEntry){.name = "mouse y", .value = world_ctx.mouse_y},
+        (statusWindowEntry){.name = "screen width",
+                            .value = world_ctx.screen_width},
+        (statusWindowEntry){.name = "screen height",
+                            .value = world_ctx.screen_height},
+        (statusWindowEntry){.name = "target frame time", .value = SIXTY_FPS_US},
+        (statusWindowEntry){.name = "frame diff(us)",
+                            .value = (SIXTY_FPS_US - frame_time)},
+        (statusWindowEntry){.name = "particle count",
+                            .value = world_ctx.particle_count},
     };
-    draw_status_window(status_window_entries,8);
+    draw_status_window(status_window_entries, 8);
 
     refresh();
   }
+  free(particles); 
 
   return 0;
 }
